@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   try {
     const response = await fetch(url, {
       headers: {
-        "RGAPI-6ac92e5b-9c70-4159-94f7-f743dedb88a5": API_KEY,
+        "X-Riot-Token": API_KEY,
       },
     });
 
