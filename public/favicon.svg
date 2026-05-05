@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Fondo oscuro con bordes redondeados (estilo app) -->
+  <rect width="512" height="512" rx="120" fill="#0a0a0c"/>
+  
+  <!-- Sombra del gráfico -->
+  <path d="M120 390 L120 230 L200 290 L256 140 L312 290 L392 190 L392 390 Z" fill="#000000" opacity="0.4"/>
+  
+  <!-- Corona / Gráfico de barras -->
+  <path d="M120 380 L120 220 L200 280 L256 130 L312 280 L392 180 L392 380 Z" fill="url(#riotBlue)"/>
+  
+  <!-- Definición del degradado azul (Estilo LordStats) -->
+  <defs>
+    <linearGradient id="riotBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+  </defs>
+</svg>
