@@ -106,39 +106,6 @@
             </div>
           </div>
         </div>
-
-        <div
-          v-if="soloQ"
-          class="bg-[#16161a] border border-gray-800 rounded-lg p-3"
-        >
-          <div class="flex justify-between items-center mb-2">
-            <p class="text-[10px] text-gray-400">
-              Últimos 30d
-              <span class="text-red-400 font-bold ml-1">▼ -45 LP</span>
-            </p>
-            <p class="text-[10px] text-gray-500 font-mono">MOCK DATA</p>
-          </div>
-          <div class="w-full h-16 relative">
-            <div class="absolute inset-0 border-b border-l border-gray-800">
-              <div class="absolute w-full h-px bg-gray-800 top-1/2"></div>
-              <div class="absolute w-px h-full bg-gray-800 left-1/3"></div>
-              <div class="absolute w-px h-full bg-gray-800 left-2/3"></div>
-            </div>
-            <svg
-              class="w-full h-full overflow-visible"
-              preserveAspectRatio="none"
-              viewBox="0 0 100 100"
-            >
-              <path
-                d="M0,40 L15,40 L25,60 L35,50 L50,50 L55,70 L65,30 L70,55 L80,35 L90,80 L100,60"
-                fill="none"
-                stroke="#2dd4bf"
-                stroke-width="2"
-                vector-effect="non-scaling-stroke"
-              />
-            </svg>
-          </div>
-        </div>
       </div>
     </div>
 

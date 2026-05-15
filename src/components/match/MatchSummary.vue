@@ -35,7 +35,7 @@ const summary = computed(() => {
   const kdaRatio =
     totalDeaths > 0
       ? ((totalKills + totalAssists) / totalDeaths).toFixed(2)
-      : "Perfecto";
+      : "KDA Perfecto";
 
   return {
     totalGames,

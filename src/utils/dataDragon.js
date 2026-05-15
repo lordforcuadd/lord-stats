@@ -53,6 +53,10 @@ export const getSummonerSpellMap = async () => {
 
   return spellMap;
 };
+export const getAugmentIconUrl = (augmentId) => {
+  if (!augmentId) return "";
+  return `https://ddragon.leagueoflegends.com/cdn/${DD_VERSION.value}/img/spell/${augmentId}.png`;
+};
 
 export const getChampionMap = async () => {
   const res = await fetch(

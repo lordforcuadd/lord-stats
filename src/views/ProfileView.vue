@@ -60,7 +60,7 @@ const goBack = () => router.push({ name: "home" });
           class="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0"
         >
           <span class="text-2xl font-black tracking-tighter text-white">
-            <span class="text-blue-400">Lord</span>Stats
+            <span class="text-blue-500">Lord</span>Stats
           </span>
         </router-link>
 
@@ -171,6 +171,27 @@ const goBack = () => router.push({ name: "home" });
               :key="match.id"
               :match="match"
             />
+
+            <button
+              v-if="
+                summonerStore.matches.length > 0 &&
+                summonerStore.currentMatchIndex <
+                  summonerStore.matchIdsList.length
+              "
+              @click="summonerStore.loadMoreMatches"
+              :disabled="summonerStore.isLoadingMore"
+              class="w-full mt-2 py-3 rounded-xl bg-[#1c1c22] border border-gray-700/50 hover:bg-[#25252b] transition-colors text-sm font-bold text-gray-300 disabled:opacity-50 flex justify-center items-center gap-2"
+            >
+              <span
+                v-if="summonerStore.isLoadingMore"
+                class="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500"
+              ></span>
+              {{
+                summonerStore.isLoadingMore
+                  ? "Cargando partidas..."
+                  : "Ver más partidas"
+              }}
+            </button>
           </div>
         </div>
       </div>

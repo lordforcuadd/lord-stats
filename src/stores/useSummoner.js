@@ -10,78 +10,90 @@ export const useSummonerStore = defineStore("summoner", {
     masteries: [],
     realRegion: "",
     isLoading: false,
+    isLoadingMore: false,
     error: null,
+    matchIdsList: [],
+    currentMatchIndex: 0,
+    clashData: [],
+    liveGame: null,
   }),
 
   actions: {
-    async fetchSummoner(selectedRegion, gameName, tagLine) {
-      this.isLoading = true;
+    async fetchSummoner(selectedRegion, gameName, tagLine, isUpdate = false) {
+      if (!isUpdate) this.isLoading = true;
       this.error = null;
       this.accountData = null;
       this.leagueData = [];
       this.matches = [];
       this.masteries = [];
+      this.clashData = [];
+      this.liveGame = null;
       this.realRegion = selectedRegion.toLowerCase();
 
       try {
         const continent = getContinent(this.realRegion);
 
-        const accountEndpoint = `/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`;
         const accountRes = await fetch(
-          `/api/riot?region=${continent}&endpoint=${encodeURIComponent(accountEndpoint)}`,
+          `/api-${continent}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`,
         );
-
         if (!accountRes.ok)
-          throw new Error(
-            `No se encontró a ${gameName}#${tagLine} en ${continent.toUpperCase()}.`,
-          );
+          throw new Error(`No se encontró a ${gameName}#${tagLine}.`);
 
         const rawAccount = await accountRes.json();
         const puuid = rawAccount.puuid;
 
-        const profileEndpoint = `/lol/summoner/v4/summoners/by-puuid/${puuid}`;
         const profileRes = await fetch(
-          `/api/riot?region=${this.realRegion}&endpoint=${encodeURIComponent(profileEndpoint)}`,
+          `/api-${this.realRegion}/lol/summoner/v4/summoners/by-puuid/${puuid}`,
         );
-
         if (!profileRes.ok)
           throw new Error("La cuenta existe pero no tiene un perfil activo.");
 
         const profileData = await profileRes.json();
+        const summonerId = profileData.id;
 
-        console.log("Datos del Perfil (EUW/LAN):", {
-          id: profileData.id,
-          icono: profileData.profileIconId,
-        });
+        const [scoreRes, challRes, leagueRes, masteryRes, clashRes] =
+          await Promise.all([
+            fetch(
+              `/api-${this.realRegion}/lol/champion-mastery/v4/scores/by-puuid/${puuid}`,
+            ),
+            fetch(
+              `/api-${this.realRegion}/lol/challenges/v1/player-data/${puuid}`,
+            ),
+
+            fetch(
+              `/api-${this.realRegion}/lol/league/v4/entries/by-puuid/${puuid}`,
+            ),
+
+            fetch(
+              `/api-${this.realRegion}/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}/top?count=3`,
+            ),
+            fetch(
+              `/api-${this.realRegion}/lol/clash/v1/players/by-puuid/${puuid}`,
+            ),
+          ]);
+
+        let totalMasteryScore = 0;
+        let challengeCrystal = "UNRANKED";
+
+        if (scoreRes.ok) totalMasteryScore = await scoreRes.json();
+        if (challRes.ok) {
+          const challData = await challRes.json();
+          challengeCrystal =
+            challData?.category?.CHALLENGE?.level || "UNRANKED";
+        }
 
         this.accountData = {
           gameName: rawAccount.gameName,
           tagLine: rawAccount.tagLine,
           puuid: puuid,
-          id: profileData.id || null,
+          id: summonerId,
           profileIconId: profileData.profileIconId,
           summonerLevel: profileData.summonerLevel,
+          totalMasteryScore: totalMasteryScore,
+          challengeCrystal: challengeCrystal,
         };
 
-        const leagueEndpoint = `/lol/league/v4/entries/by-puuid/${puuid}`;
-        const leagueRes = await fetch(
-          `/api/riot?region=${this.realRegion}&endpoint=${encodeURIComponent(leagueEndpoint)}`,
-        );
-
-        if (leagueRes.ok) {
-          this.leagueData = await leagueRes.json();
-          console.log("🏆 Ligas obtenidas correctamente");
-        } else {
-          console.warn(
-            "No se pudieron obtener las ligas (Puede ser Unranked).",
-          );
-          this.leagueData = [];
-        }
-
-        const masteryEndpoint = `/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}/top?count=3`;
-        const masteryRes = await fetch(
-          `/api/riot?region=${this.realRegion}&endpoint=${encodeURIComponent(masteryEndpoint)}`,
-        );
+        if (leagueRes.ok) this.leagueData = await leagueRes.json();
 
         if (masteryRes.ok) {
           const rawMasteries = await masteryRes.json();
@@ -94,33 +106,99 @@ export const useSummonerStore = defineStore("summoner", {
           }));
         }
 
-        const matchIdsEndpoint = `/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=10`;
-        const matchIdsRes = await fetch(
-          `/api/riot?region=${continent}&endpoint=${encodeURIComponent(matchIdsEndpoint)}`,
+        if (clashRes.ok) this.clashData = await clashRes.json();
+
+        const baseUrl = `/api-${continent}/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0`;
+        const [stdRes, tourneyRes, arenaRes, caosRes] = await Promise.all([
+          fetch(`${baseUrl}&count=40`),
+          fetch(`${baseUrl}&type=tourney&count=15`),
+          fetch(`${baseUrl}&queue=1710&count=15`),
+          fetch(`${baseUrl}&queue=720&count=15`),
+        ]);
+
+        let combinedIds = [];
+        if (stdRes.ok) combinedIds.push(...(await stdRes.json()));
+        if (tourneyRes.ok) combinedIds.push(...(await tourneyRes.json()));
+        if (arenaRes.ok) combinedIds.push(...(await arenaRes.json()));
+        if (caosRes.ok) combinedIds.push(...(await caosRes.json()));
+
+        let uniqueIds = [...new Set(combinedIds)];
+        uniqueIds.sort((a, b) => {
+          const idA = parseInt(a.split("_")[1] || 0);
+          const idB = parseInt(b.split("_")[1] || 0);
+          return idB - idA;
+        });
+
+        this.matchIdsList = uniqueIds;
+        this.currentMatchIndex = 0;
+
+        await this.loadMoreMatches();
+        await this.fetchLiveGame();
+      } catch (err) {
+        console.error("Error en el store:", err);
+        this.error = err.message;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async fetchLiveGame() {
+      if (!this.accountData?.puuid) return;
+      try {
+        const res = await fetch(
+          `/api-${this.realRegion}/lol/spectator/v5/active-games/by-summoner/${this.accountData.puuid}`,
+        );
+        if (res.ok) {
+          this.liveGame = await res.json();
+        } else {
+          this.liveGame = null;
+        }
+      } catch (e) {
+        this.liveGame = null;
+      }
+    },
+
+    async loadMoreMatches() {
+      if (
+        this.isLoadingMore ||
+        this.currentMatchIndex >= this.matchIdsList.length
+      )
+        return;
+
+      this.isLoadingMore = true;
+      try {
+        const continent = getContinent(this.realRegion);
+        const nextIds = this.matchIdsList.slice(
+          this.currentMatchIndex,
+          this.currentMatchIndex + 10,
         );
 
-        if (matchIdsRes.ok) {
-          const matchIds = await matchIdsRes.json();
+        // Filtro para ignorar si Riot nos da una partida rota (ej: 404)
+        const matchPromises = nextIds.map((id) =>
+          fetch(`/api-${continent}/lol/match/v5/matches/${id}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .catch(() => null),
+        );
 
-          const matchPromises = matchIds.map((id) => {
-            const matchEndpoint = `/lol/match/v5/matches/${id}`;
-            return fetch(
-              `/api/riot?region=${continent}&endpoint=${encodeURIComponent(matchEndpoint)}`,
-            ).then((res) => res.json());
-          });
+        const matchesData = await Promise.all(matchPromises);
+        const champMap = await getChampionMap();
+        const spellMap = await getSummonerSpellMap();
 
-          const matchesData = await Promise.all(matchPromises);
-          const champMap = await getChampionMap();
-          const spellMap = await getSummonerSpellMap();
-
-          this.matches = matchesData.map((match) => {
+        const formattedMatches = matchesData
+          .filter((m) => m && m.info && m.info.participants)
+          .map((match) => {
             const participant = match.info.participants.find(
-              (p) => p.puuid === puuid,
+              (p) => p.puuid === this.accountData.puuid,
             );
+            if (!participant) return null;
+
+            const totalCS =
+              (participant.totalMinionsKilled || 0) +
+              (participant.neutralMinionsKilled || 0);
 
             const allPlayers = match.info.participants.map((p) => ({
               ...p,
-              isMe: p.puuid === puuid,
+              isMe: p.puuid === this.accountData.puuid,
               spell1Name: spellMap[p.summoner1Id] || "SummonerEmpty",
               spell2Name: spellMap[p.summoner2Id] || "SummonerEmpty",
             }));
@@ -133,6 +211,7 @@ export const useSummonerStore = defineStore("summoner", {
               gameCreation: match.info.gameCreation,
               player: {
                 ...participant,
+                totalCS: totalCS,
                 spell1Name:
                   spellMap[participant.summoner1Id] || "SummonerEmpty",
                 spell2Name:
@@ -140,13 +219,15 @@ export const useSummonerStore = defineStore("summoner", {
               },
               participants: allPlayers,
             };
-          });
-        }
-      } catch (err) {
-        console.error("Error en el store:", err);
-        this.error = err.message;
+          })
+          .filter((m) => m !== null);
+
+        this.matches = [...this.matches, ...formattedMatches];
+        this.currentMatchIndex += 10;
+      } catch (error) {
+        console.error("Error cargando más partidas:", error);
       } finally {
-        this.isLoading = false;
+        this.isLoadingMore = false;
       }
     },
   },

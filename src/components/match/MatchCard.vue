@@ -6,6 +6,7 @@ import {
   getSummonerSpellIconUrl,
 } from "../../utils/dataDragon";
 import { analyzeMatch } from "../../utils/gemini";
+
 const props = defineProps({
   match: { type: Object, required: true },
 });
@@ -54,24 +55,114 @@ const formatGameMode = computed(() => {
   const queue = props.match.queueId;
   const queueMap = {
     0: "Personalizada",
-    400: "Normal",
+    400: "Reclutamiento",
     420: "Ranked Solo/Dúo",
     430: "Normal (Oculta)",
     440: "Ranked Flex",
     450: "ARAM",
-    490: "Quickplay",
+    490: "Partida Rápida",
     700: "Clash",
+    720: "ARAM Caos",
+    830: "Bots (Intro)",
+    840: "Bots (Principiante)",
+    850: "Bots (Intermedio)",
     900: "URF",
-    1700: "Arena",
+    1010: "ARURF",
+    1020: "Uno Para Todos",
+    1300: "Frenesí en el Nexo",
+    1400: "Libro de Hechizos",
+    1700: "Arena (2v2)",
+    1710: "Arena",
+    1900: "URF",
+    2000: "Tutorial",
   };
+
   if (queueMap[queue]) return queueMap[queue];
-  return props.match.gameMode === "CHERRY" ? "Arena" : "Grieta del Invocador";
+
+  return props.match.gameMode === "CHERRY"
+    ? "Arena"
+    : props.match.gameMode === "ARAM"
+      ? "ARAM Especial"
+      : "Grieta del Invocador";
+});
+
+const isRemake = computed(() => {
+  return (
+    props.match.player.gameEndedInEarlySurrender || props.match.duration < 210
+  );
+});
+
+const matchStatus = computed(() => {
+  if (isRemake.value) {
+    return {
+      text: "REMAKE",
+      color: "text-gray-400",
+      bg: "bg-[#1c1c22]",
+      border: "border-gray-600",
+      stripe: "bg-gray-500",
+    };
+  }
+
+  // Caso Arena (Cualquier versión: 2v2, 3x6, etc.)
+  if (
+    props.match.gameMode === "CHERRY" ||
+    props.match.queueId === 1700 ||
+    props.match.queueId === 1710
+  ) {
+    const placement =
+      props.match.player.placement || props.match.player.subteamPlacement;
+    const isWin = placement ? placement <= 4 : props.match.player.win;
+    return {
+      text: placement ? `${placement}º LUGAR` : isWin ? "VICTORIA" : "DERROTA",
+      color: isWin ? "text-fuchsia-400" : "text-gray-400",
+      bg: isWin ? "bg-[#4a2152]/40" : "bg-[#2a1a2f]/60",
+      border: isWin ? "border-fuchsia-500/30" : "border-gray-800",
+      stripe: isWin ? "bg-fuchsia-500" : "bg-gray-700",
+    };
+  }
+
+  // Caso ARAM Caos / Especiales
+  if (props.match.gameMode === "ARAM" || props.match.queueId === 720) {
+    return props.match.player.win
+      ? {
+          text: "VICTORIA",
+          color: "text-purple-400",
+          bg: "bg-[#2e234e]/60",
+          border: "border-purple-500/30",
+          stripe: "bg-purple-500",
+        }
+      : {
+          text: "DERROTA",
+          color: "text-red-400",
+          bg: "bg-[#3e1f25]/60",
+          border: "border-red-500/30",
+          stripe: "bg-red-500",
+        };
+  }
+
+  // Default: Grieta
+  return props.match.player.win
+    ? {
+        text: "VICTORIA",
+        color: "text-blue-400",
+        bg: "bg-[#28344e]/60",
+        border: "border-blue-500/30",
+        stripe: "bg-blue-500",
+      }
+    : {
+        text: "DERROTA",
+        color: "text-red-400",
+        bg: "bg-[#59343b]/60",
+        border: "border-red-500/30",
+        stripe: "bg-red-500",
+      };
 });
 
 const matchDuration = computed(
   () =>
     `${Math.floor(props.match.duration / 60)}m ${props.match.duration % 60}s`,
 );
+
 const timeAgo = computed(() => {
   const hours = Math.floor((Date.now() - props.match.gameCreation) / 3600000);
   return hours < 24 ? `hace ${hours}h` : `hace ${Math.floor(hours / 24)}d`;
@@ -80,6 +171,7 @@ const timeAgo = computed(() => {
 const itemsList = computed(() =>
   [0, 1, 2, 3, 4, 5, 6].map((i) => props.match.player[`item${i}`]),
 );
+
 const blueTeam = computed(() =>
   props.match.participants.filter((p) => p.teamId === 100),
 );
@@ -101,16 +193,20 @@ const matchTeams = computed(() => {
 
 const totalCS = computed(
   () =>
-    props.match.player.totalMinionsKilled +
-    props.match.player.neutralMinionsKilled,
+    (props.match.player.totalMinionsKilled || 0) +
+    (props.match.player.neutralMinionsKilled || 0),
 );
+
 const csPerMin = computed(() =>
   (totalCS.value / (props.match.duration / 60)).toFixed(1),
 );
 
-const kdaRatio = computed(() => {
+const playerKDA = computed(() => {
   const { kills, deaths, assists } = props.match.player;
-  return deaths === 0 ? "Perfecto" : ((kills + assists) / deaths).toFixed(2);
+  if (deaths === 0) {
+    return { isPerfect: true, score: kills + assists };
+  }
+  return { isPerfect: false, ratio: ((kills + assists) / deaths).toFixed(2) };
 });
 
 const maxDamage = computed(() =>
@@ -122,27 +218,16 @@ const maxDamage = computed(() =>
 
 <template>
   <div
-    class="flex flex-col rounded-xl overflow-hidden shadow-sm transition-all border border-riot-border relative"
+    class="flex flex-col rounded-xl overflow-hidden shadow-sm transition-all border relative mb-3"
+    :class="matchStatus.border"
   >
     <div
       class="relative flex flex-col md:flex-row p-3 items-center gap-4 transition-colors"
-      :class="
-        match.gameMode === 'CHERRY'
-          ? 'bg-[#4a2152]/60'
-          : match.player.win
-            ? 'bg-[#28344e]/60'
-            : 'bg-[#59343b]/60'
-      "
+      :class="matchStatus.bg"
     >
       <div
         class="absolute inset-y-0 left-0 w-1.5"
-        :class="
-          match.gameMode === 'CHERRY'
-            ? 'bg-fuchsia-500'
-            : match.player.win
-              ? 'bg-blue-500'
-              : 'bg-red-500'
-        "
+        :class="matchStatus.stripe"
       ></div>
 
       <div class="w-24 shrink-0 pl-2">
@@ -158,24 +243,11 @@ const maxDamage = computed(() =>
           />
         </div>
         <p class="text-[10px] text-gray-400 mb-1">{{ timeAgo }}</p>
-        <p
-          class="text-xs font-black"
-          :class="
-            match.gameMode === 'CHERRY'
-              ? 'text-fuchsia-400'
-              : match.player.win
-                ? 'text-blue-400'
-                : 'text-red-400'
-          "
-        >
-          {{
-            match.gameMode === "CHERRY"
-              ? "ARENA"
-              : match.player.win
-                ? "VICTORIA"
-                : "DERROTA"
-          }}
+
+        <p class="text-xs font-black uppercase" :class="matchStatus.color">
+          {{ matchStatus.text }}
         </p>
+
         <p class="text-[11px] text-gray-500">{{ matchDuration }}</p>
       </div>
 
@@ -195,26 +267,33 @@ const maxDamage = computed(() =>
             >
           </div>
 
-          <div v-if="match.gameMode !== 'CHERRY'" class="flex flex-col gap-0.5">
+          <div
+            v-if="match.gameMode === 'CHERRY' && match.player.augments"
+            class="grid grid-cols-2 gap-0.5 ml-1"
+          >
             <img
-              :src="getSummonerSpellIconUrl(match.player.spell1Name)"
-              class="w-5 h-5 rounded border border-gray-700 shadow-sm"
-            />
-            <img
-              :src="getSummonerSpellIconUrl(match.player.spell2Name)"
-              class="w-5 h-5 rounded border border-gray-700 shadow-sm"
+              v-for="aug in match.player.augments.slice(0, 4)"
+              :key="aug"
+              :src="getAugmentIconUrl(aug)"
+              class="w-4 h-4 rounded border border-fuchsia-500/30 bg-black/50"
             />
           </div>
-          <div
-            v-else
-            class="flex flex-col justify-center items-center h-full pl-1"
-          >
-            <span
-              class="text-[8px] text-fuchsia-300 font-bold bg-fuchsia-900/50 px-1 py-0.5 rounded border border-fuchsia-800"
-              >AUGMENTS</span
-            >
+          <div v-else class="flex flex-col gap-1 ml-1 justify-center">
+            <img
+              v-if="match.player.spell1Name !== 'SummonerEmpty'"
+              :src="getSummonerSpellIconUrl(match.player.spell1Name)"
+              class="w-6 h-6 rounded shadow-sm border border-gray-700"
+              alt="Hechizo 1"
+            />
+            <img
+              v-if="match.player.spell2Name !== 'SummonerEmpty'"
+              :src="getSummonerSpellIconUrl(match.player.spell2Name)"
+              class="w-6 h-6 rounded shadow-sm border border-gray-700"
+              alt="Hechizo 2"
+            />
           </div>
         </div>
+
         <div class="flex flex-col">
           <p class="font-black tracking-wide text-gray-200 text-sm">
             {{ match.player.kills }}
@@ -223,8 +302,16 @@ const maxDamage = computed(() =>
             <span class="text-gray-500 font-normal">/</span>
             {{ match.player.assists }}
           </p>
-          <p class="text-[10px] text-gray-400">
-            <span class="font-bold text-white">{{ kdaRatio }}:1</span> KDA
+
+          <p
+            v-if="playerKDA.isPerfect"
+            class="text-[10px] font-medium text-yellow-400"
+          >
+            KDA Perfecto
+          </p>
+          <p v-else class="text-[10px] text-gray-400">
+            <span class="font-bold text-white">{{ playerKDA.ratio }}:1</span>
+            KDA
           </p>
         </div>
       </div>
@@ -260,7 +347,6 @@ const maxDamage = computed(() =>
               :src="getChampionIconUrl(player.championName)"
               class="w-4 h-4 rounded-sm"
             />
-
             <span
               class="text-xs truncate hover:underline cursor-pointer"
               :class="player.isMe ? 'font-bold text-white' : 'text-gray-400'"
@@ -271,7 +357,6 @@ const maxDamage = computed(() =>
             </span>
           </div>
         </div>
-
         <div class="flex flex-col gap-1 w-24">
           <div
             v-for="player in match.participants.slice(5, 10)"
@@ -282,7 +367,6 @@ const maxDamage = computed(() =>
               :src="getChampionIconUrl(player.championName)"
               class="w-4 h-4 rounded-sm"
             />
-
             <span
               class="text-xs truncate hover:underline cursor-pointer"
               :class="player.isMe ? 'font-bold text-white' : 'text-gray-400'"
@@ -294,6 +378,7 @@ const maxDamage = computed(() =>
           </div>
         </div>
       </div>
+
       <button
         @click="toggleExpand"
         class="ml-auto md:ml-0 w-8 h-8 flex items-center justify-center rounded bg-black/20 hover:bg-black/40 text-gray-400 transition-all shrink-0 border border-transparent hover:border-gray-600 cursor-pointer z-10"
@@ -324,7 +409,17 @@ const maxDamage = computed(() =>
         class="px-4 py-3 bg-gradient-to-r from-[#1e1e24] to-[#0a0a0c] border-b border-riot-border flex flex-col md:flex-row items-center justify-between gap-4"
       >
         <div class="flex items-center gap-2">
-          <span class="text-xl">✨</span>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="w-5 h-5 text-cyan-400 shrink-0"
+            viewBox="0 0 24 24"
+          >
+            <path
+              fill="currentColor"
+              d="M12 2C12 2 13.5 10 13.5 10C13.5 10 21 11.5 21 11.5C21 11.5 13.5 13 13.5 13C13.5 13 12 21 12 21C12 21 10.5 13 10.5 13C10.5 13 3 11.5 3 11.5C3 11.5 10.5 10 10.5 10C10.5 10 12 2 12 2Z"
+            />
+          </svg>
+
           <h3
             class="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"
           >
@@ -378,7 +473,17 @@ const maxDamage = computed(() =>
         <div class="col-span-4 text-left">Equipo / Jugador</div>
         <div class="col-span-2">KDA</div>
         <div class="col-span-2">Daño a Campeones</div>
-        <div class="col-span-1">CS</div>
+
+        <div class="col-span-1">
+          {{
+            match.gameMode === "CHERRY" ||
+            match.gameMode === "ARAM" ||
+            match.queueId === 720
+              ? ""
+              : "CS"
+          }}
+        </div>
+
         <div class="col-span-3 text-left pl-2">Items</div>
       </div>
 
@@ -389,9 +494,13 @@ const maxDamage = computed(() =>
             :class="
               match.gameMode === 'CHERRY'
                 ? 'bg-fuchsia-900/20 text-fuchsia-400 border-fuchsia-900/30 mt-2'
-                : teamIndex === 0
-                  ? 'bg-blue-900/20 text-blue-400 border-blue-900/30'
-                  : 'bg-red-900/20 text-red-400 border-red-900/30 mt-2'
+                : match.gameMode === 'ARAM' || match.queueId === 720
+                  ? teamIndex === 0
+                    ? 'bg-purple-900/20 text-purple-400 border-purple-900/30'
+                    : 'bg-red-900/20 text-red-400 border-red-900/30 mt-2'
+                  : teamIndex === 0
+                    ? 'bg-blue-900/20 text-blue-400 border-blue-900/30'
+                    : 'bg-red-900/20 text-red-400 border-red-900/30 mt-2'
             "
           >
             <span
@@ -399,9 +508,12 @@ const maxDamage = computed(() =>
               :class="
                 match.gameMode === 'CHERRY'
                   ? 'bg-fuchsia-500'
-                  : teamIndex === 0
-                    ? 'bg-blue-500'
-                    : 'bg-red-500'
+                  : (match.gameMode === 'ARAM' || match.queueId === 720) &&
+                      teamIndex === 0
+                    ? 'bg-purple-500'
+                    : teamIndex === 0
+                      ? 'bg-blue-500'
+                      : 'bg-red-500'
               "
             ></span>
             {{
@@ -412,6 +524,7 @@ const maxDamage = computed(() =>
                   : "Equipo Rojo"
             }}
           </div>
+
           <div
             v-for="p in team"
             :key="p.puuid"
@@ -438,7 +551,6 @@ const maxDamage = computed(() =>
                   />
                 </div>
               </div>
-
               <p
                 class="text-xs truncate font-medium"
                 :class="p.isMe ? 'text-white' : 'text-gray-300'"
@@ -446,6 +558,7 @@ const maxDamage = computed(() =>
                 {{ p.riotIdGameName || p.summonerName || "Desconocido" }}
               </p>
             </div>
+
             <div class="col-span-2 text-center flex flex-col justify-center">
               <p class="text-[11px] text-gray-300">
                 {{ p.kills }} <span class="text-gray-600">/</span>
@@ -456,10 +569,11 @@ const maxDamage = computed(() =>
                 {{
                   p.deaths === 0
                     ? "Perfecto"
-                    : ((p.kills + p.assists) / p.deaths).toFixed(2)
-                }}:1
+                    : ((p.kills + p.assists) / p.deaths).toFixed(2) + ":1"
+                }}
               </p>
             </div>
+
             <div class="col-span-2 flex flex-col justify-center gap-1 px-2">
               <p class="text-[10px] text-center text-gray-300 font-mono">
                 {{ p.totalDamageDealtToChampions.toLocaleString() }}
@@ -472,9 +586,12 @@ const maxDamage = computed(() =>
                   :class="
                     match.gameMode === 'CHERRY'
                       ? 'bg-fuchsia-500'
-                      : teamIndex === 0
-                        ? 'bg-blue-500'
-                        : 'bg-red-500'
+                      : (match.gameMode === 'ARAM' || match.queueId === 720) &&
+                          teamIndex === 0
+                        ? 'bg-purple-500'
+                        : teamIndex === 0
+                          ? 'bg-blue-500'
+                          : 'bg-red-500'
                   "
                   :style="{
                     width: `${(p.totalDamageDealtToChampions / maxDamage) * 100}%`,
@@ -482,11 +599,22 @@ const maxDamage = computed(() =>
                 ></div>
               </div>
             </div>
+
             <div class="col-span-1 text-center flex flex-col justify-center">
-              <p class="text-[11px] text-gray-300">
-                {{ p.totalMinionsKilled }}
+              <p
+                v-if="
+                  match.gameMode !== 'CHERRY' &&
+                  match.gameMode !== 'ARAM' &&
+                  match.queueId !== 720
+                "
+                class="text-[11px] text-gray-300"
+              >
+                {{
+                  (p.totalMinionsKilled || 0) + (p.neutralMinionsKilled || 0)
+                }}
               </p>
             </div>
+
             <div class="col-span-3 flex gap-0.5 justify-start items-center">
               <div
                 v-for="i in 7"

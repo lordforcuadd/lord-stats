@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "source": "/api-:region/(.*)",
+      "destination": "/api/riot?region=$1&endpoint=/$2"
     },
     {
       "source": "/(.*)",

@@ -2,12 +2,10 @@
   <div
     class="bg-[#1c1c22] rounded-xl border border-gray-700/50 overflow-hidden shadow-lg flex flex-col h-full"
   >
-    <!-- HEADER -->
     <div class="p-3 border-b border-gray-700/50 bg-[#25252b]">
       <h3 class="text-xs font-bold text-gray-300">Mejores Campeones</h3>
     </div>
 
-    <!-- CONTENIDO -->
     <div class="p-4 flex-1 flex flex-col gap-3">
       <div
         v-if="isLoading"
